@@ -1,0 +1,13 @@
+name: OpenCode GitHub Loops
+description: Starter action for OpenCode GitHub Loops; currently emits a greeting.
+inputs:
+  name:
+    description: Name to greet (starter input).
+    required: false
+    default: world
+outputs:
+  greeting:
+    description: The generated greeting (starter output).
+runs:
+  using: node24
+  main: dist/index.mjs
