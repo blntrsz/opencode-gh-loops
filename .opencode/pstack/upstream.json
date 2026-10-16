@@ -1,0 +1,10 @@
+{
+  "repository": "https://github.com/cursor/plugins",
+  "path": "pstack",
+  "commit": "cdb3c41c9f2f6d41f050e3dc25e15e325493d499",
+  "excluded": [
+    "automations/benny",
+    "skills/make-bot-ui",
+    "Cursor plugin manifests"
+  ]
+}
