@@ -1,3 +1,42 @@
-node_modules
+# Dependencies and tool caches
+node_modules/
+.vite/
+.vite-plus/
+.cache/
+*.tsbuildinfo
+
+# Test and coverage artifacts
+coverage/
+.nyc_output/
+test-results/
+playwright-report/
+
+# Local environment files (keep shareable examples)
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Logs and runtime diagnostics
 *.log
+logs/
+report.*.json
+
+# Python caches from repository tooling
+__pycache__/
+*.py[cod]
+
+# Editor and OS files
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/launch.json
+!.vscode/tasks.json
+*.swp
+*.swo
+*~
 .DS_Store
+Thumbs.db
+
+# dist/ is intentionally tracked: GitHub Actions executes this bundle.
