@@ -39,7 +39,53 @@ export function executionDiagnostic(error: {
   };
 }
 
-export function decodeWorkerResult(output: string): { markdown: string } {
+export interface WorkerMemoryNote {
+  readonly paths: readonly string[];
+  readonly text: string;
+}
+
+/** Shared bounds so the worker's schema and the parent's validation cannot drift. */
+export const memoryBounds = { notes: 40, text: 2000, paths: 16, path: 512 } as const;
+
+/** A cited path must stay a plain repository-relative path. */
+export function isSafeNotePath(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    value.length <= memoryBounds.path &&
+    !value.startsWith("/") &&
+    !value.split("").some((char) => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127) &&
+    !value.split("/").some((part) => part === "" || part === "." || part === "..")
+  );
+}
+
+/** Validate reviewer-authored notes returned by the worker. Never trust the child. */
+export function decodeNotes(value: unknown): WorkerMemoryNote[] | undefined {
+  if (!Array.isArray(value) || value.length > memoryBounds.notes) return undefined;
+  const notes: WorkerMemoryNote[] = [];
+  for (const note of value) {
+    if (typeof note !== "object" || note === null || Array.isArray(note)) return undefined;
+    if (Object.keys(note).some((key) => !["paths", "text"].includes(key))) return undefined;
+    const { paths, text } = note as { paths?: unknown; text?: unknown };
+    if (!Array.isArray(paths) || paths.length === 0 || paths.length > memoryBounds.paths)
+      return undefined;
+    if (!paths.every(isSafeNotePath)) return undefined;
+    if (
+      typeof text !== "string" ||
+      text.length === 0 ||
+      text.length > memoryBounds.text ||
+      text.split("").some((char) => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)
+    )
+      return undefined;
+    notes.push({ paths, text });
+  }
+  return notes;
+}
+
+export function decodeWorkerResult(output: string): {
+  markdown: string;
+  notes?: WorkerMemoryNote[];
+} {
   let result: unknown;
   try {
     result = JSON.parse(output);
@@ -50,12 +96,16 @@ export function decodeWorkerResult(output: string): { markdown: string } {
     throw new Error("Invalid worker response.");
   if (
     result.ok === true &&
-    Object.keys(result).every((key) => ["ok", "markdown"].includes(key)) &&
+    Object.keys(result).every((key) => ["ok", "markdown", "notes"].includes(key)) &&
     "markdown" in result &&
     typeof result.markdown === "string" &&
     result.markdown.trim()
-  )
-    return { markdown: result.markdown };
+  ) {
+    // Notes are an optimization: unusable notes are dropped rather than
+    // failing a review that could still be published.
+    const notes = "notes" in result ? decodeNotes(result.notes) : undefined;
+    return { markdown: result.markdown, ...(notes ? { notes } : {}) };
+  }
   if (
     result.ok === false &&
     Object.keys(result).every((key) => ["ok", "error"].includes(key)) &&

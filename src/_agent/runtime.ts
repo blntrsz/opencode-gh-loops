@@ -15,7 +15,13 @@ export async function installWorker(
   await mkdir(runtime);
   for (const file of ["package.json", "bun.lock"])
     await cp(join(action, file), join(runtime, file));
-  for (const file of ["index.ts", "process.ts", "protocol.ts", "smoke-models.json"])
+  for (const file of [
+    "index.ts",
+    "memory-prompt.ts",
+    "process.ts",
+    "protocol.ts",
+    "smoke-models.json",
+  ])
     await cp(join(action, "src", "_agent", file), join(runtime, file));
   await processRun(
     process.execPath,

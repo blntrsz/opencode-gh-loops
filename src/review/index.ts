@@ -2,6 +2,7 @@ import * as core from "@actions/core";
 import { fileURLToPath } from "node:url";
 import { Effect, Layer } from "effect";
 import { githubLayer } from "./github-review.ts";
+import { commentMemoryLayer, disabledMemory } from "./memory-service.ts";
 import { opencodeLayer } from "./opencode-review.ts";
 import { parseRequest, review } from "./review.ts";
 
@@ -9,7 +10,7 @@ async function run(signal: AbortSignal): Promise<void> {
   try {
     const request = parseRequest(
       Object.fromEntries(
-        ["pr-number", "branch", "model", "skill", "prompt"]
+        ["pr-number", "branch", "model", "skill", "prompt", "memory"]
           .map((name) => [name, core.getInput(name)])
           .concat([["repository", process.env.GITHUB_REPOSITORY ?? ""]]),
       ),
@@ -19,7 +20,12 @@ async function run(signal: AbortSignal): Promise<void> {
     const temp = process.env.RUNNER_TEMP;
     const action = fileURLToPath(new URL("../../", import.meta.url));
     if (!temp) throw new Error("RUNNER_TEMP must be set.");
-    const layers = Layer.merge(githubLayer(token), opencodeLayer({ token, temp, action }));
+    const log = (message: string) => core.info(message);
+    const layers = Layer.mergeAll(
+      githubLayer(token),
+      opencodeLayer({ token, temp, action }),
+      request.memory ? commentMemoryLayer(token, log) : disabledMemory,
+    );
     const result = await Effect.runPromise(
       review(request).pipe(Effect.provide(layers), Effect.timeout("15 minutes")),
       { signal },

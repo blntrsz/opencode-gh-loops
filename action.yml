@@ -14,6 +14,10 @@ inputs:
     description: OpenCode provider/model reference.
     required: false
     default: opencode/deepseek-v4.1-flash-free
+  memory:
+    description: Reuse a bot-owned review memory comment to skip repeated investigation. True or false.
+    required: false
+    default: "false"
   token:
     description: GitHub App installation token with contents read and pull requests write.
     required: true
@@ -45,5 +49,6 @@ runs:
         INPUT_BRANCH: ${{ inputs.branch }}
         INPUT_MODEL: ${{ inputs.model }}
         INPUT_SKILL: ${{ inputs.skill }}
+        INPUT_MEMORY: ${{ inputs.memory }}
         INPUT_TOKEN: ${{ inputs.token }}
       run: bun run ./src/review/index.ts

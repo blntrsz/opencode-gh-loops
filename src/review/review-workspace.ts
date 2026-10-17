@@ -1,6 +1,7 @@
 import { mkdtemp, mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { cleanEnvironment, processRun } from "../_agent/process.ts";
+import { memoryKeys, parseRawDiff, type MemoryKeys } from "./memory.ts";
 import type { ReviewRequest, ReviewSnapshot } from "./review.ts";
 
 export interface TrustedSkill {
@@ -8,6 +9,34 @@ export interface TrustedSkill {
   readonly content: string;
   readonly references: Readonly<Record<string, string>>;
 }
+/**
+ * Content-addressed identity of the reviewed change. Uses the merge base, so
+ * the key survives a rebase, a base merge, and the base branch advancing.
+ */
+export async function readMemoryKeys(
+  git: (args: string[]) => Promise<string>,
+  snapshot: ReviewSnapshot,
+): Promise<MemoryKeys> {
+  const mergeBase = (await git(["merge-base", snapshot.base, snapshot.head])).trim();
+  if (!/^[0-9a-f]{40}$/.test(mergeBase)) throw new Error("Unexpected merge base.");
+  return memoryKeys(
+    mergeBase,
+    snapshot.head,
+    parseRawDiff(
+      await git([
+        "diff",
+        "--raw",
+        "--no-abbrev",
+        "--no-renames",
+        "--no-color",
+        "-z",
+        mergeBase,
+        snapshot.head,
+      ]),
+    ),
+  );
+}
+
 export async function withWorkspace<A>(
   request: ReviewRequest,
   snapshot: ReviewSnapshot,
@@ -18,6 +47,8 @@ export async function withWorkspace<A>(
     home: string;
     repository: string;
     skill?: TrustedSkill;
+    /** Content-addressed identity of this review, when memory is enabled. */
+    memory?: MemoryKeys;
   }) => Promise<A>,
   signal?: AbortSignal,
 ): Promise<A> {
@@ -86,7 +117,23 @@ export async function withWorkspace<A>(
       if (!content?.trim()) throw new Error("Trusted skill is empty.");
       skill = { id: request.mode.id, content, references };
     }
-    return await run({ root, home, repository, ...(skill ? { skill } : {}) });
+    // Key derivation is best-effort: an unexpected repository shape disables
+    // memory for this run instead of failing the review.
+    let memory: MemoryKeys | undefined;
+    if (request.memory) {
+      try {
+        memory = await readMemoryKeys(git, snapshot);
+      } catch {
+        memory = undefined;
+      }
+    }
+    return await run({
+      root,
+      home,
+      repository,
+      ...(skill ? { skill } : {}),
+      ...(memory ? { memory } : {}),
+    });
   } finally {
     await rm(root, { recursive: true, force: true });
   }

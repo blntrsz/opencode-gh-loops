@@ -63,6 +63,7 @@ if (process.argv.includes("--isolated")) {
             number: 1,
             branch: "feature",
             model: "opencode/deepseek-v4.1-flash-free",
+            memory: false,
             mode: { type: "skill", id: "pr-review" },
           },
           snapshot: { base: head, head },
@@ -76,8 +77,10 @@ if (process.argv.includes("--isolated")) {
         [plugin],
       ),
     );
-    if (scenario === "success") assert.equal((await result).smoke, true);
-    else {
+    if (scenario === "success") {
+      const outcome = await result;
+      assert.equal("smoke" in outcome && outcome.smoke, true);
+    } else {
       const reason = {
         empty: "",
         "first-reason": "Execution is unavailable.",
@@ -115,6 +118,7 @@ if (process.argv.includes("--isolated")) {
             number: 1,
             branch: "feature",
             model: "opencode/deepseek-v4.1-flash-free",
+            memory: false,
             mode: { type: "skill", id: "pr-review" },
           },
           snapshot: { base: head, head },
@@ -178,6 +182,7 @@ if (process.argv.includes("--isolated")) {
                 number: 1,
                 branch: "feature",
                 model: "opencode/deepseek-v4.1-flash-free",
+                memory: false,
                 mode,
               },
               snapshot: { base: head, head },
@@ -214,6 +219,7 @@ if (process.argv.includes("--isolated")) {
               number: 1,
               branch: "feature",
               model: "opencode/missing-review-model",
+              memory: false,
               mode: { type: "native" },
             },
             snapshot: { base: head, head },

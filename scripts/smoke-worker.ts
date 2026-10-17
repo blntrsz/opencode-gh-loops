@@ -92,6 +92,39 @@ try {
     /OpenCode WorkerError: Requested skill was not loaded\./,
   );
   console.log("Packaged failure envelope reaches the parent decoder without stderr forwarding.");
+
+  const withMemory = await processRun(process.execPath, [worker, "--smoke"], {
+    cwd: repository,
+    env,
+    timeout: 60000,
+    diagnostics: true,
+    input: JSON.stringify({
+      request: {
+        repository: "test/repo",
+        number: 1,
+        branch: "feature",
+        model: "opencode/deepseek-v4.1-flash-free",
+        mode: { type: "skill", id: "pr-review" },
+      },
+      snapshot: { base: head, head },
+      skill: {
+        id: "pr-review",
+        content: "Review the PR. Use review-reference for references/rules.md.",
+        references: { "references/rules.md": "Report concrete bugs." },
+      },
+      memory: {
+        reason: "The reviewed change is byte-identical to the last review.",
+        exact: true,
+        notes: [{ paths: ["smoke.txt"], text: "Fixture note for the next review." }],
+        moved: [],
+      },
+    }),
+  });
+  const memoryResult = JSON.parse(withMemory);
+  assert.equal(memoryResult.ok, true);
+  assert.equal(memoryResult.tools.length, 6);
+  assert.deepEqual(memoryResult.notes, [{ paths: ["smoke.txt"], text: "fixture note" }]);
+  console.log("Review memory exposes a sixth tool and returns bounded notes.");
 } finally {
   await rm(root, { recursive: true, force: true });
 }

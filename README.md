@@ -1,6 +1,6 @@
 # OpenCode PR review
 
-A reusable composite GitHub Action that reviews an exact PR snapshot and upserts one bot-owned Markdown summary. The action sets up Bun 1.4.3, installs locked production dependencies with lifecycle scripts disabled, and runs `bun run ./src/review/index.ts`. There is no JavaScript compilation or build step. Consumers do not need a repository checkout.
+A reusable composite GitHub Action that reviews an exact PR snapshot and upserts one bot-owned Markdown summary. An opt-in review memory adds a second bot-owned comment so later runs on the same pull request skip repeated investigation. The action sets up Bun 1.4.3, installs locked production dependencies with lifecycle scripts disabled, and runs `bun run ./src/review/index.ts`. There is no JavaScript compilation or build step. Consumers do not need a repository checkout.
 
 ## Use the action
 
@@ -38,13 +38,29 @@ Without `skill`, the SDK invokes the actual built-in `/review` command against t
 
 `status` is `published` or `skipped`. `summary-url` is the comment URL or an empty string. Reviews are free-form Markdown, bounded to 50,000 characters. This action does not invent a structured verdict or post inline findings. It rechecks both SHAs before publication and refuses stale output. A commit can still arrive after the last API check, so the summary includes both reviewed SHAs.
 
+`memory` defaults to `false`. When it is `true`, the action also reconciles a second bot-owned comment holding reusable notes. A failed memory read or write is logged and ignored: it never fails a review that could otherwise be published.
+
+## Review memory
+
+Memory lets a follow-up review of the same pull request start from what an earlier review already established instead of re-reading the same source. It is keyed by content, never by commit identity.
+
+- The merge base of the base and head commits is the review base, so a rebase, a base merge, and the base branch advancing past the merge all leave the key unchanged.
+- `git diff --raw --no-abbrev --no-renames` between that merge base and head describes the net change. Hashing those descriptors, including the mode bits, produces the review key. A mode-only change produces a new key; a rebase with identical bytes does not.
+- Each note cites the file paths it depends on. A note is reused only while every cited path keeps the same blob and mode. Otherwise it is dropped and re-verified, and the reviewer is told which paths moved.
+
+An identical review key reuses every note and tells the reviewer the bytes are unchanged. A different key reuses only the notes whose paths did not move. A changed model, review mode, skill contents, or memory schema discards memory entirely. A reviewer that records no notes keeps the notes it reused; recording an empty list prunes them. Notes are dropped from the end until the record fits the comment budget, and a change too large for even a note-free record stores no memory at all.
+
+Stored memory is data, never instructions. It is bounded and strictly validated on both write and read, wrapped in an explicitly delimited untrusted block in the reviewer's system prompt, and its mention and code-fence characters are escaped so it cannot alter the published summary. The memory comment follows the same bot-ownership and retry rules as the summary, and needs no permission beyond the `pull-requests: write` the summary already uses.
+
+`MemoryService` is an Effect `Context.Service` with `read` and `write`. Key derivation, reuse decisions, and record assembly stay in the caller, so another backend — GitHub Actions artifacts, for example — can replace the comment transport without changing what memory means.
+
 ## Runtime and security limits
 
 The action installs production dependencies and runs TypeScript in `github.action_path`, which contains the selected action revision, not PR source. The token input is mapped only to the review step, not the dependency installation step.
 
 The review process owns the GitHub token. It fetches Git objects into an action-owned temporary repository using a transient Git HTTP header. It never checks out PR source, runs PR repository installs, or initializes submodules. Global Git config and hooks are disabled.
 
-The SDK runs TypeScript in a separate Bun process with a fresh home, config, cache, state, and temporary directory. Its environment contains no GitHub token, provider keys, `NODE_OPTIONS`, `BUN_OPTIONS`, or inherited OpenCode configuration. Project configuration loading is disabled. MCP, custom commands, external plugins, and instruction discovery from PR files are unavailable. The worker removes built-in tools and exposes fixed snapshot diff, file-list, file-read, trusted-reference, and review-failure tools. There is no shell tool, write tool, model subagent, or general filesystem tool. Git reads disable external diffs and text conversion. A missing reference or a call to the review-failure tool prevents publication.
+The SDK runs TypeScript in a separate Bun process with a fresh home, config, cache, state, and temporary directory. Its environment contains no GitHub token, provider keys, `NODE_OPTIONS`, `BUN_OPTIONS`, or inherited OpenCode configuration. Project configuration loading is disabled. MCP, custom commands, external plugins, and instruction discovery from PR files are unavailable. The worker removes built-in tools and exposes fixed snapshot diff, file-list, file-read, trusted-reference, and review-failure tools, plus one note-recording tool only when memory is enabled. That tool returns its notes in the review result; it writes nothing outside it. There is no shell tool, filesystem write tool, model subagent, or general filesystem tool. Git reads disable external diffs and text conversion. A missing reference or a call to the review-failure tool prevents publication.
 
 This process separation is not an OS sandbox. The worker still has network access and runs as the runner user. Do not use a runner containing unrelated secrets or sensitive files. PR text can influence the model, and source is sent to the selected provider. Skill references are trusted only because they come from the base commit. Review output is untrusted text. Mention characters are neutralized before publication.
 
@@ -77,7 +93,7 @@ bun run smoke:action
 test -z "$(git ls-files -- dist)"
 ```
 
-The worker smoke installs the shipped TypeScript package into a fresh directory and initializes the real SDK under Bun. It checks native command expansion, the session model, explicit skill-content hydration, restricted tool registration, and Git-backed snapshot reads. Native review stops at the prompt hook. Skill review uses `resume: false` to hydrate the attachment without generation. The smoke does not test inference or remote publication.
+The worker smoke installs the shipped TypeScript package into a fresh directory and initializes the real SDK under Bun. It checks native command expansion, the session model, explicit skill-content hydration, restricted tool registration, and Git-backed snapshot reads. It also runs a memory pass that registers the sixth tool and returns its bounded notes. Native review stops at the prompt hook. Skill review uses `resume: false` to hydrate the attachment without generation. The smoke does not test inference or remote publication.
 
 `smoke:action` copies only source and manifests into a path containing spaces, installs production dependencies, runs the exact action command, and checks missing-input errors. It also runs the isolated worker smoke from that installation. It verifies that no development dependencies or `dist` artifacts are required or produced.
 
@@ -85,4 +101,4 @@ No-inference smoke tests use `src/_agent/smoke-models.json` with remote catalog 
 
 `smoke:generation` runs both production review modes in fresh credentials-free Bun children against a local mock OpenAI-compatible provider and catalog. It checks the exact default model, provider-visible native command or selected skill instructions, a real Git-backed `review-diff` tool call, and literal final Markdown extraction. The fixture serves SSE responses and verifies the introduced multiplication-to-addition regression in the next model request. Requests and child lifetimes are bounded, and temporary homes are removed. This is deterministic mocked-provider generation, not live model inference or remote publication.
 
-`GitHubService` and `OpenCodeService` are Effect v4 `Context.Service` contracts. Their `Layer.effect` implementations own GitHub reconciliation and isolated SDK execution. The review policy depends on these contracts, so tests and alternate implementations can replace either service without changing the policy. `/dist/` remains ignored and untracked; nothing builds or executes it.
+`GitHubService`, `OpenCodeService`, and `MemoryService` are Effect v4 `Context.Service` contracts. Their `Layer` implementations own GitHub reconciliation, isolated SDK execution, and memory transport. The review policy and the reviewer layer depend on these contracts, so tests and alternate implementations can replace any service without changing policy or memory semantics. `/dist/` remains ignored and untracked; nothing builds or executes it.

@@ -145,6 +145,7 @@ if (process.argv.includes("--isolated")) {
             number: 1,
             branch: "feature",
             model: "opencode/deepseek-v4.1-flash-free",
+            memory: false,
             mode: mode === "native" ? { type: "native" } : { type: "skill", id: "pr-review" },
           },
           snapshot: { base, head },

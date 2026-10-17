@@ -1,5 +1,7 @@
 import { Effect, Layer } from "effect";
 import { expect, test, vi } from "vite-plus/test";
+import { buildRecord } from "../src/review/memory.ts";
+import { disabledMemory, MemoryService } from "../src/review/memory-service.ts";
 import {
   GitHubService,
   OpenCodeService,
@@ -35,7 +37,7 @@ function fixture(snapshots: ReviewSnapshot[] = [snapshot, snapshot]) {
   const publish = vi.fn(() => Effect.succeed("https://example.invalid/comment"));
   const run = vi.fn(() => Effect.succeed({ markdown: "No defects found." }));
   let index = 0;
-  const layer = Layer.merge(
+  const layer = Layer.mergeAll(
     Layer.effect(
       GitHubService,
       Effect.succeed(
@@ -50,6 +52,7 @@ function fixture(snapshots: ReviewSnapshot[] = [snapshot, snapshot]) {
       ),
     ),
     Layer.effect(OpenCodeService, Effect.succeed(OpenCodeService.of({ review: run }))),
+    disabledMemory,
   );
   return { layer, publish, run };
 }
@@ -61,7 +64,7 @@ test("review services receive the validated request and exact resolved snapshot"
     status: "published",
     detail: "https://example.invalid/comment",
   });
-  expect(run).toHaveBeenCalledWith(request, snapshot);
+  expect(run).toHaveBeenCalledWith(request, snapshot, undefined);
   expect(publish).toHaveBeenCalledWith(request, snapshot, { markdown: "No defects found." });
 });
 
@@ -75,7 +78,7 @@ test.each(["base", "head"] as const)("does not publish after a stale %s SHA", as
 
 test("skip does not start OpenCode or publish", async () => {
   const { run, publish } = fixture();
-  const layer = Layer.merge(
+  const layer = Layer.mergeAll(
     Layer.effect(
       GitHubService,
       Effect.succeed(
@@ -86,6 +89,7 @@ test("skip does not start OpenCode or publish", async () => {
       ),
     ),
     Layer.effect(OpenCodeService, Effect.succeed(OpenCodeService.of({ review: run }))),
+    disabledMemory,
   );
   expect(await Effect.runPromise(review(parseRequest(input)).pipe(Effect.provide(layer)))).toEqual({
     status: "skipped",
@@ -93,4 +97,58 @@ test("skip does not start OpenCode or publish", async () => {
   });
   expect(run).not.toHaveBeenCalled();
   expect(publish).not.toHaveBeenCalled();
+});
+
+test("memory is read before the review and written only after publication", async () => {
+  const order: string[] = [];
+  const stored = buildRecord({
+    repository: "owner/repo",
+    number: 12,
+    config: { model: "opencode/x", mode: "native", skill: "", instructions: 1 },
+    keys: {
+      mergeBase: "a".repeat(40),
+      head: "b".repeat(40),
+      reviewKey: "",
+      files: [],
+    },
+    reviewed: snapshot,
+    notes: [{ paths: ["src/a.ts"], text: "one note" }],
+  });
+  if (!stored) throw new Error("Expected a storable memory record fixture.");
+  const memory = Layer.succeed(
+    MemoryService,
+    MemoryService.of({
+      read: () => Effect.sync(() => (order.push("read"), stored)),
+      write: () => Effect.sync(() => void order.push("write")),
+    }),
+  );
+  const layer = Layer.mergeAll(
+    Layer.effect(
+      GitHubService,
+      Effect.succeed(
+        GitHubService.of({
+          resolve: () => Effect.succeed({ type: "review", snapshot }),
+          publish: () => Effect.sync(() => (order.push("publish"), "url")),
+        }),
+      ),
+    ),
+    Layer.effect(
+      OpenCodeService,
+      Effect.succeed(
+        OpenCodeService.of({
+          review: (_request, _snapshot, previous) =>
+            Effect.sync(() => {
+              order.push(`review:${previous?.notes[0]?.text ?? "none"}`);
+              return { markdown: "body", memory: stored };
+            }),
+        }),
+      ),
+    ),
+    memory,
+  );
+  const result = await Effect.runPromise(
+    review(parseRequest({ ...input, memory: "true" })).pipe(Effect.provide(layer)),
+  );
+  expect(result).toEqual({ status: "published", detail: "url" });
+  expect(order).toEqual(["read", "review:one note", "publish", "write"]);
 });

@@ -41,3 +41,24 @@ test("worker protocol admits only explicit success and validated failure", () =>
   ])
     expect(() => decodeWorkerResult(JSON.stringify(result))).toThrow("Invalid worker response.");
 });
+
+test("reviewer notes are bounded and unusable notes never lose the review", () => {
+  const note = { paths: ["src/a.ts"], text: "one note" };
+  expect(
+    decodeWorkerResult(JSON.stringify({ ok: true, markdown: "Review", notes: [note] })),
+  ).toEqual({ markdown: "Review", notes: [note] });
+  for (const notes of [
+    [{ paths: [], text: "no paths" }],
+    [{ paths: ["../escape"], text: "traversal" }],
+    [{ paths: ["/absolute"], text: "absolute" }],
+    [{ paths: ["src/a.ts"], text: "" }],
+    [{ paths: ["src/a.ts"], text: "x".repeat(2001) }],
+    [{ paths: ["src/a.ts"], text: "line\nbreak" }],
+    Array.from({ length: 41 }, () => note),
+    [{ paths: ["src/a.ts"], text: "note", extra: true }],
+    "not an array",
+  ])
+    expect(decodeWorkerResult(JSON.stringify({ ok: true, markdown: "Review", notes }))).toEqual({
+      markdown: "Review",
+    });
+});
