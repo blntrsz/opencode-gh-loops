@@ -26,9 +26,9 @@ uses Bun's test runner rather than Vite+'s bundled Vitest.
 
 Tool configuration lives in `vite.config.ts`. `vp pack` bundles the action and
 its dependencies into `dist/index.mjs`, with no consumer-side install needed.
-Keep `dist/` in version control: GitHub executes the bundle from the selected
-repository ref, not TypeScript source. CI checks formatting, linting, types,
-tests, bundle freshness, and the action's input/output contract.
+`dist/` is build output and is not tracked; run `bun run build` to regenerate it.
+CI checks formatting, linting, types, tests, rebuilds the bundle, and verifies
+the action's input/output contract.
 
 ## Use the action
 
@@ -55,6 +55,8 @@ requiring a monorepo.
 ## Releasing
 
 Implement the intended action behavior and update its metadata/tests first.
-Run all checks and rebuild, then include `action.yml` and `dist/` in the release
-commit. Publish a version tag and, if desired, move a major-version alias such
-as `v1` to that release. No automatic publishing or tag movement is configured.
+Run all checks and rebuild the bundle with `bun run build`. GitHub executes the
+bundle from the selected ref, not TypeScript source, so the release ref must
+contain a built `dist/`; force-add it (`git add -f dist`) on the release commit.
+Publish a version tag and, if desired, move a major-version alias such as `v1`
+to that release. No automatic publishing or tag movement is configured.

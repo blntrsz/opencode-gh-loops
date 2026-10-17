@@ -23,10 +23,6 @@ jobs:
       - run: bun run check
       - run: bun run test --run
       - run: bun run build
-      - name: Verify committed action bundle is current
-        run: |
-          git diff --exit-code -- dist
-          test -z "$(git status --porcelain --untracked-files=all -- dist)"
       - name: Smoke-test the bundled action
         id: smoke
         uses: ./
