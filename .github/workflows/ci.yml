@@ -17,7 +17,6 @@ jobs:
         with:
           bun-version: 1.4.3
       - run: bun install --frozen-lockfile --ignore-scripts
-      - run: bun install --cwd src/_agent --ignore-scripts
       - run: bun run --bun check
       - run: bun run --bun test --run
       - run: bun run smoke:failures

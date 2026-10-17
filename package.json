@@ -16,6 +16,9 @@
   },
   "dependencies": {
     "@actions/core": "^1.11.1",
+    "@opencode/plugin": "2.0.25",
+    "@opencode/schema": "2.0.25",
+    "@opencode/sdk": "2.0.25",
     "effect": "4.0.0-rc.112"
   },
   "devDependencies": {
