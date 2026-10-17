@@ -20,19 +20,23 @@ jobs:
         with:
           bun-version: 1.4.3
       - run: bun install --frozen-lockfile
+      - run: bun install --cwd worker --frozen-lockfile --ignore-scripts
       - run: bun run check
       - run: bun run test --run
+      - run: bun run smoke:failures
+      - run: bun run smoke:stdin
+      - run: bun run smoke:generation
       - run: bun run build
       - name: Verify committed action bundle is current
         run: |
           git diff --exit-code -- dist
           test -z "$(git status --porcelain --untracked-files=all -- dist)"
-      - name: Smoke-test the bundled action
-        id: smoke
-        uses: ./
-        with:
-          name: Octocat
-      - name: Verify action output
-        env:
-          GREETING: ${{ steps.smoke.outputs.greeting }}
-        run: test "$GREETING" = 'Hello, Octocat!'
+      - name: Verify distributable worker without inference
+        run: bun run smoke
+      - name: Verify bundled input validation
+        run: |
+          if node dist/index.mjs > "$RUNNER_TEMP/action-smoke.txt" 2>&1; then
+            echo 'Expected missing inputs to fail'
+            exit 1
+          fi
+          grep -q 'pr-number must be a positive integer' "$RUNNER_TEMP/action-smoke.txt"

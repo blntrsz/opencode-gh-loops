@@ -1,0 +1,36 @@
+{
+  "opencode": {
+    "id": "opencode",
+    "name": "OpenCode",
+    "env": [],
+    "npm": "@ai-sdk/openai-compatible",
+    "api": "http://127.0.0.1:1/no-inference",
+    "models": {
+      "deepseek-v4.1-flash-free": {
+        "id": "deepseek-v4.1-flash-free",
+        "name": "Smoke model",
+        "tool_call": true,
+        "cost": { "input": 0, "output": 0 },
+        "limit": { "context": 200000, "output": 32000 },
+        "modalities": { "input": ["text"], "output": ["text"] }
+      }
+    }
+  },
+  "openai": {
+    "id": "openai",
+    "name": "OpenAI smoke",
+    "env": [],
+    "npm": "@ai-sdk/openai",
+    "api": "http://127.0.0.1:1/no-inference",
+    "models": {
+      "gpt-5": {
+        "id": "gpt-5",
+        "name": "Smoke override",
+        "tool_call": true,
+        "cost": { "input": 0, "output": 0 },
+        "limit": { "context": 200000, "output": 32000 },
+        "modalities": { "input": ["text"], "output": ["text"] }
+      }
+    }
+  }
+}

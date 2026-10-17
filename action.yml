@@ -1,13 +1,28 @@
-name: OpenCode GitHub Loops
-description: Starter action for OpenCode GitHub Loops; currently emits a greeting.
+name: OpenCode PR review
+description: Review an exact GitHub PR snapshot with OpenCode and upsert a Markdown summary.
 inputs:
-  name:
-    description: Name to greet (starter input).
+  pr-number:
+    description: Pull request number in github.repository.
+    required: true
+  branch:
+    description: PR HEAD ref. Must equal the GitHub API head.ref.
+    required: true
+  skill:
+    description: Exact skill ID from .opencode/skills/<id>/SKILL.md at the PR base. Omit for native /review.
     required: false
-    default: world
+  model:
+    description: OpenCode provider/model reference.
+    required: false
+    default: opencode/deepseek-v4.1-flash-free
+  token:
+    description: GitHub App installation token with contents read and pull requests write.
+    required: true
+    default: ${{ github.token }}
 outputs:
-  greeting:
-    description: The generated greeting (starter output).
+  status:
+    description: published or skipped.
+  summary-url:
+    description: URL of the bot-owned review summary, empty when skipped.
 runs:
   using: node24
   main: dist/index.mjs

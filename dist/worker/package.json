@@ -1,0 +1,11 @@
+{
+  "name": "opencode-review-worker",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@opencode/plugin": "2.0.25",
+    "@opencode/schema": "2.0.25",
+    "@opencode/sdk": "2.0.25",
+    "effect": "4.0.0-rc.112"
+  }
+}

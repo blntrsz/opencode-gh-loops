@@ -14,6 +14,7 @@ export default defineConfig({
     deps: {
       alwaysBundle: [/./],
       onlyBundle: [
+        "effect",
         "@actions/core",
         "@actions/http-client",
         "@actions/io",

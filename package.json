@@ -2,16 +2,21 @@
   "name": "opencode-gh-loops",
   "version": "0.0.0",
   "private": true,
-  "description": "A Bun and Vite+ starter for reusable GitHub Actions.",
+  "description": "Snapshot-bound OpenCode pull request reviews.",
   "type": "module",
   "scripts": {
-    "build": "vp pack",
+    "build": "vp pack && bun run scripts/build-worker.ts",
+    "smoke": "bun scripts/smoke-worker.ts",
+    "smoke:failures": "node worker/smoke-failures.ts",
+    "smoke:stdin": "node worker/smoke-stdin.ts",
+    "smoke:generation": "node worker/smoke-generation.ts",
     "dev": "vp pack --watch",
     "test": "vp test",
     "check": "vp check"
   },
   "dependencies": {
-    "@actions/core": "^1.11.1"
+    "@actions/core": "^1.11.1",
+    "effect": "4.0.0-rc.112"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
