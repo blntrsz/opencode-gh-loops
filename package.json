@@ -5,12 +5,12 @@
   "description": "Snapshot-bound OpenCode pull request reviews.",
   "type": "module",
   "scripts": {
-    "build": "vp pack && bun run scripts/build-worker.ts",
-    "smoke": "bun scripts/smoke-worker.ts",
-    "smoke:failures": "node worker/smoke-failures.ts",
-    "smoke:stdin": "node worker/smoke-stdin.ts",
-    "smoke:generation": "node worker/smoke-generation.ts",
-    "dev": "vp pack --watch",
+    "review": "bun run ./src/review/index.ts",
+    "smoke": "bun run scripts/smoke-worker.ts",
+    "smoke:action": "bun run scripts/smoke-action.ts",
+    "smoke:failures": "bun run src/_agent/smoke-failures.ts",
+    "smoke:stdin": "bun run src/_agent/smoke-stdin.ts",
+    "smoke:generation": "bun run src/_agent/smoke-generation.ts",
     "test": "vp test",
     "check": "vp check"
   },
@@ -29,7 +29,7 @@
     "vitest": "5.0.5"
   },
   "engines": {
-    "node": "^24.11.0"
+    "bun": "1.4.3"
   },
   "packageManager": "bun@1.4.3"
 }

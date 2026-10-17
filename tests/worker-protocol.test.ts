@@ -1,5 +1,5 @@
 import { expect, test } from "vite-plus/test";
-import { decodeWorkerResult, executionDiagnostic } from "../src/worker-protocol.ts";
+import { decodeWorkerResult, executionDiagnostic } from "../src/_agent/protocol.ts";
 
 test("worker failures preserve bounded diagnostics without response bodies or credentials", () => {
   const error = executionDiagnostic({

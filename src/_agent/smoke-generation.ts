@@ -4,8 +4,8 @@ import { mkdtemp, mkdir, readFile, rm } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { cleanEnvironment, processRun } from "../src/review-process.ts";
-import { runWorker } from "./review-worker.ts";
+import { cleanEnvironment, processRun } from "./process.ts";
+import { runWorker } from "./index.ts";
 import { Effect } from "effect";
 
 const skillInstructions =

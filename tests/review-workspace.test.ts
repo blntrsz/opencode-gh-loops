@@ -2,12 +2,12 @@ import { access, mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { processRun } from "../src/review-process.ts";
-import { parseRequest } from "../src/review.ts";
-import { withWorkspace } from "../src/review-workspace.ts";
+import { processRun } from "../src/_agent/process.ts";
+import { parseRequest } from "../src/review/review.ts";
+import { withWorkspace } from "../src/review/review-workspace.ts";
 
-vi.mock("../src/review-process.ts", async (original) => ({
-  ...(await original<typeof import("../src/review-process.ts")>()),
+vi.mock("../src/_agent/process.ts", async (original) => ({
+  ...(await original<typeof import("../src/_agent/process.ts")>()),
   processRun: vi.fn(),
 }));
 afterEach(() => vi.resetAllMocks());

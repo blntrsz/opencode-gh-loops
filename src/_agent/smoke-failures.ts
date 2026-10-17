@@ -9,9 +9,9 @@ import { Plugin } from "@opencode/plugin/effect";
 import { Agent } from "@opencode/sdk/effect";
 import { Deferred, Effect, Fiber } from "effect";
 import { Tool } from "@opencode/schema/tool";
-import { cleanEnvironment, processRun } from "../src/review-process.ts";
-import { runWorker } from "./review-worker.ts";
-import { WorkerFailure } from "../src/worker-protocol.ts";
+import { cleanEnvironment, processRun } from "./process.ts";
+import { runWorker } from "./index.ts";
+import { WorkerFailure } from "./protocol.ts";
 
 if (process.argv.includes("--isolated")) {
   const head = (

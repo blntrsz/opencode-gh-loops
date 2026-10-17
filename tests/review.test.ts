@@ -6,7 +6,7 @@ import {
   parseRequest,
   review,
   type ReviewSnapshot,
-} from "../src/review.ts";
+} from "../src/review/review.ts";
 
 const input = { repository: "owner/repo", "pr-number": "12", branch: "feature" };
 const snapshot = { base: "a".repeat(40), head: "b".repeat(40) };

@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vite-plus/test";
-import { cleanEnvironment, processRun } from "../src/review-process.ts";
+import { cleanEnvironment, processRun } from "../src/_agent/process.ts";
 
 test("worker environment has no inherited credentials or OpenCode configuration", () => {
   process.env.TEST_REVIEW_SECRET = "not inherited";
@@ -10,6 +10,7 @@ test("worker environment has no inherited credentials or OpenCode configuration"
   expect(env).not.toHaveProperty("TEST_REVIEW_SECRET");
   expect(env).not.toHaveProperty("GITHUB_TOKEN");
   expect(env).not.toHaveProperty("NODE_OPTIONS");
+  expect(env).not.toHaveProperty("BUN_OPTIONS");
   expect(env.HOME).toBe("/isolated/home");
   expect(env.GIT_CONFIG_GLOBAL).toBe("/dev/null");
   delete process.env.TEST_REVIEW_SECRET;

@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import { expect, test } from "vite-plus/test";
-import { githubLayer, marker, summary } from "../src/github-review.ts";
-import { GitHubService, parseRequest } from "../src/review.ts";
+import { githubLayer, marker, summary } from "../src/review/github-review.ts";
+import { GitHubService, parseRequest } from "../src/review/review.ts";
 
 const request = parseRequest({ repository: "owner/repo", "pr-number": "1", branch: "feature" });
 const snapshot = { base: "a".repeat(40), head: "b".repeat(40) };

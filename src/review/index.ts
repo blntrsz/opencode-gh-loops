@@ -5,7 +5,7 @@ import { githubLayer } from "./github-review.ts";
 import { opencodeLayer } from "./opencode-review.ts";
 import { parseRequest, review } from "./review.ts";
 
-export async function run(signal?: AbortSignal): Promise<void> {
+async function run(signal: AbortSignal): Promise<void> {
   try {
     const request = parseRequest(
       Object.fromEntries(
@@ -17,7 +17,7 @@ export async function run(signal?: AbortSignal): Promise<void> {
     const token = core.getInput("token", { required: true });
     core.setSecret(token);
     const temp = process.env.RUNNER_TEMP;
-    const action = fileURLToPath(new URL("../", import.meta.url));
+    const action = fileURLToPath(new URL("../../", import.meta.url));
     if (!temp) throw new Error("RUNNER_TEMP must be set.");
     const layers = Layer.merge(githubLayer(token), opencodeLayer({ token, temp, action }));
     const result = await Effect.runPromise(
@@ -31,3 +31,11 @@ export async function run(signal?: AbortSignal): Promise<void> {
     core.setFailed(error instanceof Error ? error.message : String(error));
   }
 }
+
+const controller = new AbortController();
+const cancel = () => controller.abort();
+process.once("SIGINT", cancel);
+process.once("SIGTERM", cancel);
+await run(controller.signal);
+process.removeListener("SIGINT", cancel);
+process.removeListener("SIGTERM", cancel);

@@ -1,6 +1,6 @@
 import { mkdtemp, mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { cleanEnvironment, processRun } from "./review-process.ts";
+import { cleanEnvironment, processRun } from "../_agent/process.ts";
 import type { ReviewRequest, ReviewSnapshot } from "./review.ts";
 
 export interface TrustedSkill {

@@ -4,10 +4,10 @@ import { Plugin } from "@opencode/plugin/effect";
 import { Cause, Deferred, Effect, Logger, Schema, Stream } from "effect";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { processRun } from "../src/review-process.ts";
-import type { ReviewRequest, ReviewSnapshot } from "../src/review.ts";
-import type { TrustedSkill } from "../src/review-workspace.ts";
-import { executionDiagnostic, WorkerFailure } from "../src/worker-protocol.ts";
+import { processRun } from "./process.ts";
+import type { ReviewRequest, ReviewSnapshot } from "../review/review.ts";
+import type { TrustedSkill } from "../review/review-workspace.ts";
+import { executionDiagnostic, WorkerFailure } from "./protocol.ts";
 
 interface WorkerInput {
   readonly request: ReviewRequest;

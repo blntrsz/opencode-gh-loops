@@ -1,9 +1,9 @@
 import { Effect, Layer } from "effect";
 import { OpenCodeService, ReviewError } from "./review.ts";
-import { decodeWorkerResult } from "./worker-protocol.ts";
-import { cleanEnvironment, processRun } from "./review-process.ts";
+import { decodeWorkerResult } from "../_agent/protocol.ts";
+import { cleanEnvironment, processRun } from "../_agent/process.ts";
 import { withWorkspace } from "./review-workspace.ts";
-import { installWorker } from "./worker-runtime.ts";
+import { installWorker } from "../_agent/runtime.ts";
 
 export function opencodeLayer(options: { token: string; temp: string; action: string }) {
   return Layer.effect(

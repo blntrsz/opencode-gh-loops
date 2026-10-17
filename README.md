@@ -1,10 +1,10 @@
 # OpenCode PR review
 
-A reusable composite GitHub Action that reviews an exact PR snapshot and upserts one bot-owned Markdown summary. The action sets up Node 24 and Bun 1.4.3, installs its locked build dependencies with lifecycle scripts disabled, and builds its trusted source automatically. Consumers do not add build steps or check out a repository.
+A reusable composite GitHub Action that reviews an exact PR snapshot and upserts one bot-owned Markdown summary. The action sets up Bun 1.4.3, installs locked production dependencies with lifecycle scripts disabled, and runs `bun run ./src/review/index.ts`. There is no JavaScript compilation or build step. Consumers do not need a repository checkout.
 
 ## Use the action
 
-Run trusted action code on a Linux x64 runner with Git and unzip. Grant `contents: read` and `pull-requests: write`. Pin the action to a reviewed commit in production.
+Run trusted action code on a Linux x64 runner with Git. Grant `contents: read` and `pull-requests: write`. Pin the action to a reviewed commit in production.
 
 ```yaml
 permissions:
@@ -40,38 +40,50 @@ Without `skill`, the SDK invokes the actual built-in `/review` command against t
 
 ## Runtime and security limits
 
-The action builds in `github.action_path`, which contains the selected action revision, not PR source. The build installs root development dependencies because Vite bundles the parent. The token input is mapped only to the review step, not the install or build step. No worker dependency install is needed for the build.
+The action installs production dependencies and runs TypeScript in `github.action_path`, which contains the selected action revision, not PR source. The token input is mapped only to the review step, not the dependency installation step.
 
-The bundled parent owns the GitHub token. It fetches Git objects into an action-owned temporary repository using a transient Git HTTP header. It never checks out PR source, runs PR repository installs, or initializes submodules. Global Git config and hooks are disabled.
+The review process owns the GitHub token. It fetches Git objects into an action-owned temporary repository using a transient Git HTTP header. It never checks out PR source, runs PR repository installs, or initializes submodules. Global Git config and hooks are disabled.
 
-The SDK runs in a separate Node 24 process with a fresh home, config, cache, state, and temporary directory. Its environment contains no GitHub token, provider keys, `NODE_OPTIONS`, or inherited OpenCode configuration. Project configuration loading is disabled. MCP, custom commands, external plugins, and instruction discovery from PR files are unavailable. The worker removes built-in tools and exposes fixed snapshot diff, file-list, file-read, trusted-reference, and review-failure tools. There is no shell tool, write tool, model subagent, or general filesystem tool. Git reads disable external diffs and text conversion. A missing reference or a call to the review-failure tool prevents publication.
+The SDK runs TypeScript in a separate Bun process with a fresh home, config, cache, state, and temporary directory. Its environment contains no GitHub token, provider keys, `NODE_OPTIONS`, `BUN_OPTIONS`, or inherited OpenCode configuration. Project configuration loading is disabled. MCP, custom commands, external plugins, and instruction discovery from PR files are unavailable. The worker removes built-in tools and exposes fixed snapshot diff, file-list, file-read, trusted-reference, and review-failure tools. There is no shell tool, write tool, model subagent, or general filesystem tool. Git reads disable external diffs and text conversion. A missing reference or a call to the review-failure tool prevents publication.
 
 This process separation is not an OS sandbox. The worker still has network access and runs as the runner user. Do not use a runner containing unrelated secrets or sensitive files. PR text can influence the model, and source is sent to the selected provider. Skill references are trusted only because they come from the base commit. Review output is untrusted text. Mention characters are neutralized before publication.
 
-Worker dependencies are not bundled because the SDK uses native modules and dynamic imports. Each run downloads Bun 1.4.3 for Linux x64, verifies a pinned SHA-256, and installs the committed worker lockfile with lifecycle scripts disabled. Node 24 runs SDK 2.0.25 with Effect 4.0.0-rc.112. The worker's dependency installation is confined to `RUNNER_TEMP` and removed after success, failure, timeout, or cancellation. The worker installer does not change global tools. The runner needs outbound access to GitHub, the package registry, OpenCode's model catalog, and the inference provider. Installation adds network overhead on each run.
+The worker copies its TypeScript source and committed lockfile from `src/_agent/` into `RUNNER_TEMP`. The same Bun executable installs SDK 2.0.25 and Effect 4.0.0-rc.112 with lifecycle scripts disabled, then runs that source directly. No second runtime download or compiler is needed. The temporary installation is removed after success, failure, timeout, or cancellation. The runner needs outbound access to GitHub, the package registry, OpenCode's model catalog, and the inference provider. Installation adds network overhead on each run.
 
-The worker uses `@opencode/sdk/effect` and `@opencode/plugin/effect` directly. An Effect scope owns the SDK and one event-stream fiber. Subscription readiness precedes session admission. A shared first-failure signal interrupts pending admission or completion when a hook, execution, or event stream fails. Scope teardown interrupts the consumer before the SDK finalizes. Only Git process calls adapt Promises inside the worker. `Effect.runPromise` appears at the Node executable and test boundaries.
+The worker uses `@opencode/sdk/effect` and `@opencode/plugin/effect` directly. An Effect scope owns the SDK and one event-stream fiber. Subscription readiness precedes session admission. A shared first-failure signal interrupts pending admission or completion when a hook, execution, or event stream fails. Scope teardown interrupts the consumer before the SDK finalizes. Only Git process calls adapt Promises inside the worker. `Effect.runPromise` appears at executable and test boundaries.
+
+## Source layout
+
+```text
+src/
+  _agent/    # Agent execution, process isolation, protocol, and locked SDK dependencies
+  review/   # GitHub review action, policy, publication, and snapshot preparation
+    index.ts
+```
+
+Underscore-prefixed directories hold internal vertical slices. Named action directories hold their entrypoints and action-specific logic. The root `action.yml` packages the review entrypoint as a composite action.
 
 ## Develop and verify
 
 ```sh
 bun install --frozen-lockfile --ignore-scripts
-bun install --cwd worker --frozen-lockfile --ignore-scripts
-bun run check
-bun run test --run
-bun run build
+bun install --cwd src/_agent --frozen-lockfile --ignore-scripts
+bun run --bun check
+bun run --bun test --run
 bun run smoke:failures
 bun run smoke:stdin
 bun run smoke:generation
 bun run smoke
+bun run smoke:action
 test -z "$(git ls-files -- dist)"
-git check-ignore dist/index.mjs dist/worker/review-worker.js
 ```
 
-Node 24 must be on `PATH` for the packaging smoke. `NODE_BINARY` can select an explicit Node 24 executable. The smoke installs the shipped worker package into a fresh directory and initializes the real SDK. It checks native command expansion, the session model, explicit skill-content hydration, restricted tool registration, and Git-backed snapshot reads. Native review stops at the prompt hook. Skill review uses `resume: false` to hydrate the attachment without generation. The smoke does not test inference or remote publication.
+The worker smoke installs the shipped TypeScript package into a fresh directory and initializes the real SDK under Bun. It checks native command expansion, the session model, explicit skill-content hydration, restricted tool registration, and Git-backed snapshot reads. Native review stops at the prompt hook. Skill review uses `resume: false` to hydrate the attachment without generation. The smoke does not test inference or remote publication.
 
-No-inference smoke tests use `worker/smoke-models.json` with remote catalog fetching disabled. `smoke:failures` also serves a local catalog to test production startup, missing-model rejection, and execution-failure events in both review modes without inference. It interrupts blocked admission and checks that SDK plugin resources finalize within a bounded lifetime.
+`smoke:action` copies only source and manifests into a path containing spaces, installs production dependencies, runs the exact action command, and checks missing-input errors. It also runs the isolated worker smoke from that installation. It verifies that no development dependencies or `dist` artifacts are required or produced.
 
-`smoke:generation` runs both production review modes in fresh credentials-free Node children against a local mock OpenAI-compatible provider and catalog. It checks the exact default model, provider-visible native command or selected skill instructions, a real Git-backed `review-diff` tool call, and literal final Markdown extraction. The fixture serves SSE responses and verifies the introduced multiplication-to-addition regression in the next model request. Requests and child lifetimes are bounded, and temporary homes are removed. This is deterministic mocked-provider generation, not live model inference or remote publication.
+No-inference smoke tests use `src/_agent/smoke-models.json` with remote catalog fetching disabled. `smoke:failures` also serves a local catalog to test production startup, missing-model rejection, and execution-failure events in both review modes without inference. It interrupts blocked admission and checks that SDK plugin resources finalize within a bounded lifetime.
 
-`GitHubService` and `OpenCodeService` are Effect v4 `Context.Service` contracts. Their `Layer.effect` implementations own GitHub reconciliation and isolated SDK execution. The review policy depends on these contracts, so tests and alternate implementations can replace either service without changing the policy. `/dist/` is ignored and untracked. Action startup and CI build `dist/index.mjs` and `dist/worker` from source before execution.
+`smoke:generation` runs both production review modes in fresh credentials-free Bun children against a local mock OpenAI-compatible provider and catalog. It checks the exact default model, provider-visible native command or selected skill instructions, a real Git-backed `review-diff` tool call, and literal final Markdown extraction. The fixture serves SSE responses and verifies the introduced multiplication-to-addition regression in the next model request. Requests and child lifetimes are bounded, and temporary homes are removed. This is deterministic mocked-provider generation, not live model inference or remote publication.
+
+`GitHubService` and `OpenCodeService` are Effect v4 `Context.Service` contracts. Their `Layer.effect` implementations own GitHub reconciliation and isolated SDK execution. The review policy depends on these contracts, so tests and alternate implementations can replace either service without changing the policy. `/dist/` remains ignored and untracked; nothing builds or executes it.

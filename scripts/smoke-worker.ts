@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { mkdtemp, mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { installWorker } from "../src/worker-runtime.ts";
-import { cleanEnvironment, processRun } from "../src/review-process.ts";
-import { decodeWorkerResult } from "../src/worker-protocol.ts";
+import { installWorker } from "../src/_agent/runtime.ts";
+import { cleanEnvironment, processRun } from "../src/_agent/process.ts";
+import { decodeWorkerResult } from "../src/_agent/protocol.ts";
 
 const root = await mkdtemp(join(tmpdir(), "review-package-smoke-"));
 try {
@@ -39,7 +39,7 @@ try {
   const worker = await installWorker(process.cwd(), root, home);
   for (const mode of [{ type: "native" }, { type: "skill", id: "pr-review" }] as const) {
     const model = mode.type === "native" ? "opencode/deepseek-v4.1-flash-free" : "openai/gpt-5";
-    const output = await processRun(process.env.NODE_BINARY || "node", [worker, "--smoke"], {
+    const output = await processRun(process.execPath, [worker, "--smoke"], {
       cwd: repository,
       env,
       timeout: 60000,
@@ -70,9 +70,9 @@ try {
     assert.equal(result.mode, mode.type);
     assert.equal(result.model, model);
     assert.equal(result.tools.length, 5);
-    console.log(`Node SDK no-inference smoke passed for ${mode.type}.`);
+    console.log(`Bun TypeScript SDK no-inference smoke passed for ${mode.type}.`);
   }
-  const failure = await processRun(process.env.NODE_BINARY || "node", [worker], {
+  const failure = await processRun(process.execPath, [worker], {
     cwd: repository,
     env,
     timeout: 60000,

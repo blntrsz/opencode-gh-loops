@@ -13,30 +13,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: .node-version
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.3
       - run: bun install --frozen-lockfile --ignore-scripts
-      - run: bun install --cwd worker --frozen-lockfile --ignore-scripts
-      - run: bun run check
-      - run: bun run test --run
-      - run: bun run build
+      - run: bun install --cwd src/_agent --frozen-lockfile --ignore-scripts
+      - run: bun run --bun check
+      - run: bun run --bun test --run
       - run: bun run smoke:failures
       - run: bun run smoke:stdin
       - run: bun run smoke:generation
-      - name: Verify action bundles stay untracked
+      - name: Verify no compiled action artifacts
         run: |
           test -z "$(git ls-files -- dist)"
-          git check-ignore dist/index.mjs dist/worker/review-worker.js
-      - name: Verify distributable worker without inference
+          test ! -d dist
+      - name: Verify isolated TypeScript worker without inference
         run: bun run smoke
-      - name: Verify bundled input validation
-        run: |
-          if node dist/index.mjs > "$RUNNER_TEMP/action-smoke.txt" 2>&1; then
-            echo 'Expected missing inputs to fail'
-            exit 1
-          fi
-          grep -q 'pr-number must be a positive integer' "$RUNNER_TEMP/action-smoke.txt"
+      - name: Verify source-only production action
+        run: bun run smoke:action

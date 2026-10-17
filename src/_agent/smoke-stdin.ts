@@ -5,7 +5,7 @@ import { mkdtemp, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout } from "node:timers/promises";
-import { cleanEnvironment, processRun } from "../src/review-process.ts";
+import { cleanEnvironment, processRun } from "./process.ts";
 
 const root = await mkdtemp(join(tmpdir(), "review-stdin-smoke-"));
 try {
@@ -48,16 +48,12 @@ try {
       },
     }),
   );
-  const child = spawn(
-    process.execPath,
-    [join(import.meta.dirname, "review-worker.ts"), "--smoke"],
-    {
-      cwd: repository,
-      env,
-      stdio: ["pipe", "pipe", "pipe"],
-      timeout: 60000,
-    },
-  );
+  const child = spawn(process.execPath, [join(import.meta.dirname, "index.ts"), "--smoke"], {
+    cwd: repository,
+    env,
+    stdio: ["pipe", "pipe", "pipe"],
+    timeout: 60000,
+  });
   const completed = once(child, "close");
   let output = "";
   let error = "";
@@ -86,9 +82,9 @@ try {
     result.skills.data.find((skill: { id: string }) => skill.id === "pr-review")?.content,
     "Review € prices and 🐛 bugs exactly.",
   );
-  console.log("Node SDK no-inference split UTF-8 stdin regression passed.");
+  console.log("Bun SDK no-inference split UTF-8 stdin regression passed.");
   await assert.rejects(
-    processRun(process.execPath, [join(import.meta.dirname, "review-worker.ts"), "--smoke"], {
+    processRun(process.execPath, [join(import.meta.dirname, "index.ts"), "--smoke"], {
       cwd: repository,
       env,
       diagnostics: true,
