@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { cleanEnvironment, processRun } from "../src/review-process.ts";
 import { runWorker } from "./review-worker.ts";
+import { Effect } from "effect";
 
 const skillInstructions =
   "Review multiplication regressions. Preserve the exact marker skill-generation-€-🐛.";
@@ -136,23 +137,25 @@ if (process.argv.includes("--isolated")) {
   assert.ok(address && typeof address !== "string");
   const url = `http://127.0.0.1:${address.port}`;
   try {
-    const result = await runWorker(
-      {
-        request: {
-          repository: "test/repo",
-          number: 1,
-          branch: "feature",
-          model: "opencode/deepseek-v4.1-flash-free",
-          mode: mode === "native" ? { type: "native" } : { type: "skill", id: "pr-review" },
+    const result = await Effect.runPromise(
+      runWorker(
+        {
+          request: {
+            repository: "test/repo",
+            number: 1,
+            branch: "feature",
+            model: "opencode/deepseek-v4.1-flash-free",
+            mode: mode === "native" ? { type: "native" } : { type: "skill", id: "pr-review" },
+          },
+          snapshot: { base, head },
+          ...(mode === "skill"
+            ? { skill: { id: "pr-review", content: skillInstructions, references: {} } }
+            : {}),
         },
-        snapshot: { base, head },
-        ...(mode === "skill"
-          ? { skill: { id: "pr-review", content: skillInstructions, references: {} } }
-          : {}),
-      },
-      false,
-      [],
-      { url },
+        false,
+        [],
+        { url },
+      ),
     );
     if (fixtureFailure) throw fixtureFailure;
     assert.deepEqual(result, { markdown });

@@ -5,8 +5,9 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
-import { Plugin } from "@opencode/plugin";
-import { Agent } from "@opencode/sdk";
+import { Plugin } from "@opencode/plugin/effect";
+import { Agent } from "@opencode/sdk/effect";
+import { Deferred, Effect, Fiber } from "effect";
 import { Tool } from "@opencode/schema/tool";
 import { cleanEnvironment, processRun } from "../src/review-process.ts";
 import { runWorker } from "./review-worker.ts";
@@ -23,48 +24,57 @@ if (process.argv.includes("--isolated")) {
     let exercised = false;
     const plugin = Plugin.define({
       id: `failure-regression-${scenario}`,
-      setup: async (context) => {
-        await context.session.hook("prompt", async (event) => {
-          const tools = await context.tool.list();
-          const toolContext = {
-            sessionID: event.sessionID,
-            messageID: event.messageID,
-            agent: Agent.ID.make("reviewer"),
-            id: Tool.CallID.make("failure-regression"),
-            progress: async () => {},
-            signal: new AbortController().signal,
-          };
-          const unavailable = tools.find((tool) => tool.id === "review-unavailable");
-          const reference = tools.find((tool) => tool.id === "review-reference");
-          assert.ok(unavailable);
-          assert.ok(reference);
-          if (scenario === "missing-reference")
-            await assert.rejects(reference.execute({ path: "missing.md" }, toolContext));
-          if (scenario === "first-reason")
-            await unavailable.execute({ reason: "Execution is unavailable." }, toolContext);
-          if (scenario !== "success") await unavailable.execute({ reason: "" }, toolContext);
-          exercised = true;
-        });
-      },
+      effect: (context) =>
+        context.session
+          .hook("prompt", (event) =>
+            Effect.gen(function* () {
+              const tools = yield* context.tool.list();
+              const toolContext = {
+                sessionID: event.sessionID,
+                messageID: event.messageID,
+                agent: Agent.ID.make("reviewer"),
+                id: Tool.CallID.make("failure-regression"),
+                progress: () => Effect.void,
+              };
+              const unavailable = tools.find((tool) => tool.id === "review-unavailable");
+              const reference = tools.find((tool) => tool.id === "review-reference");
+              assert.ok(unavailable);
+              assert.ok(reference);
+              if (scenario === "missing-reference")
+                assert.equal(
+                  (yield* Effect.flip(
+                    reference.execute({ path: "missing.md" }, toolContext),
+                  )) instanceof Error,
+                  true,
+                );
+              if (scenario === "first-reason")
+                yield* unavailable.execute({ reason: "Execution is unavailable." }, toolContext);
+              if (scenario !== "success") yield* unavailable.execute({ reason: "" }, toolContext);
+              exercised = true;
+            }).pipe(Effect.orDie, Effect.uninterruptible),
+          )
+          .pipe(Effect.asVoid),
     });
-    const result = runWorker(
-      {
-        request: {
-          repository: "test/repo",
-          number: 1,
-          branch: "feature",
-          model: "opencode/deepseek-v4.1-flash-free",
-          mode: { type: "skill", id: "pr-review" },
+    const result = Effect.runPromise(
+      runWorker(
+        {
+          request: {
+            repository: "test/repo",
+            number: 1,
+            branch: "feature",
+            model: "opencode/deepseek-v4.1-flash-free",
+            mode: { type: "skill", id: "pr-review" },
+          },
+          snapshot: { base: head, head },
+          skill: {
+            id: "pr-review",
+            content: "Review the PR.",
+            references: { "references/rules.md": "Report concrete bugs." },
+          },
         },
-        snapshot: { base: head, head },
-        skill: {
-          id: "pr-review",
-          content: "Review the PR.",
-          references: { "references/rules.md": "Report concrete bugs." },
-        },
-      },
-      true,
-      [plugin],
+        true,
+        [plugin],
+      ),
     );
     if (scenario === "success") assert.equal((await result).smoke, true);
     else {
@@ -80,6 +90,53 @@ if (process.argv.includes("--isolated")) {
     assert.equal(exercised, true);
     console.log(`SDK no-inference failure regression passed for ${scenario}.`);
   }
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const entered = yield* Deferred.make<void>();
+      let finalized = false;
+      const plugin = Plugin.define({
+        id: "scope-cancellation-regression",
+        effect: (context) =>
+          Effect.gen(function* () {
+            yield* Effect.addFinalizer(() =>
+              Effect.sync(() => {
+                finalized = true;
+              }),
+            );
+            yield* context.session.hook("prompt", () =>
+              Deferred.succeed(entered, undefined).pipe(Effect.andThen(Effect.never)),
+            );
+          }),
+      });
+      const fiber = yield* runWorker(
+        {
+          request: {
+            repository: "test/repo",
+            number: 1,
+            branch: "feature",
+            model: "opencode/deepseek-v4.1-flash-free",
+            mode: { type: "skill", id: "pr-review" },
+          },
+          snapshot: { base: head, head },
+          skill: {
+            id: "pr-review",
+            content: "Review the PR.",
+            references: { "references/rules.md": "Report concrete bugs." },
+          },
+        },
+        true,
+        [plugin],
+      ).pipe(Effect.forkChild);
+      yield* Deferred.await(entered);
+      yield* Fiber.interrupt(fiber);
+      assert.equal(
+        finalized,
+        true,
+        "Worker cancellation must finalize SDK plugin resources before returning.",
+      );
+    }).pipe(Effect.timeout("15 seconds")),
+  );
+  console.log("Blocked admission cancellation finalizes SDK resources within a bounded lifetime.");
   const catalog = await readFile(new URL("./smoke-models.json", import.meta.url), "utf8");
   let catalogRequests = 0;
   let generationRequests = 0;
@@ -102,31 +159,36 @@ if (process.argv.includes("--isolated")) {
       let reachedContext = false;
       const plugin = Plugin.define({
         id: `catalog-regression-${mode.type}`,
-        setup: async (context) => {
-          await context.session.hook("context", () => {
-            reachedContext = true;
-            throw new Error("Synthetic execution failure before inference.");
-          });
-        },
+        effect: (context) =>
+          context.session
+            .hook("context", () =>
+              Effect.sync(() => {
+                reachedContext = true;
+                throw new Error("Synthetic execution failure before inference.");
+              }),
+            )
+            .pipe(Effect.asVoid),
       });
       await assert.rejects(
-        runWorker(
-          {
-            request: {
-              repository: "test/repo",
-              number: 1,
-              branch: "feature",
-              model: "opencode/deepseek-v4.1-flash-free",
-              mode,
+        Effect.runPromise(
+          runWorker(
+            {
+              request: {
+                repository: "test/repo",
+                number: 1,
+                branch: "feature",
+                model: "opencode/deepseek-v4.1-flash-free",
+                mode,
+              },
+              snapshot: { base: head, head },
+              ...(mode.type === "skill"
+                ? { skill: { id: "pr-review", content: "Review the PR.", references: {} } }
+                : {}),
             },
-            snapshot: { base: head, head },
-            ...(mode.type === "skill"
-              ? { skill: { id: "pr-review", content: "Review the PR.", references: {} } }
-              : {}),
-          },
-          false,
-          [plugin],
-          { url },
+            false,
+            [plugin],
+            { url },
+          ),
         ),
         (error: unknown) => {
           assert.ok(error instanceof WorkerFailure);
@@ -144,29 +206,34 @@ if (process.argv.includes("--isolated")) {
     }
     let promptReached = false;
     await assert.rejects(
-      runWorker(
-        {
-          request: {
-            repository: "test/repo",
-            number: 1,
-            branch: "feature",
-            model: "opencode/missing-review-model",
-            mode: { type: "native" },
-          },
-          snapshot: { base: head, head },
-        },
-        false,
-        [
-          Plugin.define({
-            id: "missing-model-regression",
-            setup: async (context) => {
-              await context.session.hook("context", () => {
-                promptReached = true;
-              });
+      Effect.runPromise(
+        runWorker(
+          {
+            request: {
+              repository: "test/repo",
+              number: 1,
+              branch: "feature",
+              model: "opencode/missing-review-model",
+              mode: { type: "native" },
             },
-          }),
-        ],
-        { url },
+            snapshot: { base: head, head },
+          },
+          false,
+          [
+            Plugin.define({
+              id: "missing-model-regression",
+              effect: (context) =>
+                context.session
+                  .hook("context", () =>
+                    Effect.sync(() => {
+                      promptReached = true;
+                    }),
+                  )
+                  .pipe(Effect.asVoid),
+            }),
+          ],
+          { url },
+        ),
       ),
       /Requested model is unavailable in the active catalog: opencode\/missing-review-model/,
     );

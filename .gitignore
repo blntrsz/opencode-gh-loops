@@ -40,4 +40,4 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
-# dist/ is intentionally tracked: GitHub Actions executes this bundle.
+/dist/
