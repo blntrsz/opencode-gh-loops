@@ -13,20 +13,14 @@ export async function installWorker(
   if (!process.versions.bun) throw new Error("The review action must run with Bun.");
   const runtime = join(root, "runtime");
   await mkdir(runtime);
-  for (const file of [
-    "package.json",
-    "bun.lock",
-    "index.ts",
-    "process.ts",
-    "protocol.ts",
-    "smoke-models.json",
-  ])
+  for (const file of ["package.json", "index.ts", "process.ts", "protocol.ts", "smoke-models.json"])
     await cp(join(action, "src", "_agent", file), join(runtime, file));
-  await processRun(
-    process.execPath,
-    ["install", "--cwd", runtime, "--frozen-lockfile", "--ignore-scripts"],
-    { cwd: root, env: cleanEnvironment(home), signal, timeout: 180000 },
-  );
+  await processRun(process.execPath, ["install", "--cwd", runtime, "--ignore-scripts"], {
+    cwd: root,
+    env: cleanEnvironment(home),
+    signal,
+    timeout: 180000,
+  });
   const manifest = JSON.parse(
     await readFile(join(runtime, "node_modules", "@opencode", "sdk", "package.json"), "utf8"),
   ) as { version: string };

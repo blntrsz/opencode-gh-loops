@@ -1,6 +1,7 @@
 # Dependencies and tool caches
 node_modules/
 .local-node/
+/src/_agent/bun.lock
 .vite/
 .vite-plus/
 .cache/

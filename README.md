@@ -48,7 +48,7 @@ The SDK runs TypeScript in a separate Bun process with a fresh home, config, cac
 
 This process separation is not an OS sandbox. The worker still has network access and runs as the runner user. Do not use a runner containing unrelated secrets or sensitive files. PR text can influence the model, and source is sent to the selected provider. Skill references are trusted only because they come from the base commit. Review output is untrusted text. Mention characters are neutralized before publication.
 
-The worker copies its TypeScript source and committed lockfile from `src/_agent/` into `RUNNER_TEMP`. The same Bun executable installs SDK 2.0.25 and Effect 4.0.0-rc.112 with lifecycle scripts disabled, then runs that source directly. No second runtime download or compiler is needed. The temporary installation is removed after success, failure, timeout, or cancellation. The runner needs outbound access to GitHub, the package registry, OpenCode's model catalog, and the inference provider. Installation adds network overhead on each run.
+The worker copies its TypeScript source and pinned manifest from `src/_agent/` into `RUNNER_TEMP`. The same Bun executable installs SDK 2.0.25 and Effect 4.0.0-rc.112 from that manifest with lifecycle scripts disabled, then runs that source directly. The manifest names exact versions for its four direct dependencies, so no lockfile is committed; transitive dependencies resolve at install time and are not pinned. No second runtime download or compiler is needed. The temporary installation is removed after success, failure, timeout, or cancellation. The runner needs outbound access to GitHub, the package registry, OpenCode's model catalog, and the inference provider. Installation adds network overhead on each run.
 
 The worker uses `@opencode/sdk/effect` and `@opencode/plugin/effect` directly. An Effect scope owns the SDK and one event-stream fiber. Subscription readiness precedes session admission. A shared first-failure signal interrupts pending admission or completion when a hook, execution, or event stream fails. Scope teardown interrupts the consumer before the SDK finalizes. Only Git process calls adapt Promises inside the worker. `Effect.runPromise` appears at executable and test boundaries.
 
@@ -56,18 +56,18 @@ The worker uses `@opencode/sdk/effect` and `@opencode/plugin/effect` directly. A
 
 ```text
 src/
-  _agent/    # Agent execution, process isolation, protocol, and locked SDK dependencies
+  _agent/    # Agent execution, process isolation, protocol, and pinned SDK dependencies
   review/   # GitHub review action, policy, publication, and snapshot preparation
     index.ts
 ```
 
-Underscore-prefixed directories hold internal vertical slices. Named action directories hold their entrypoints and action-specific logic. The root `action.yml` packages the review entrypoint as a composite action.
+Underscore-prefixed directories hold internal vertical slices. Named action directories hold their entrypoints and action-specific logic. The root `action.yml` packages the review entrypoint as a composite action. `bun.lock` lives only at the repository root; bundled skill scripts such as `.opencode/pstack/skills/poteto-mode/scripts/bun.lock` are the only other permitted lockfiles.
 
 ## Develop and verify
 
 ```sh
 bun install --frozen-lockfile --ignore-scripts
-bun install --cwd src/_agent --frozen-lockfile --ignore-scripts
+bun install --cwd src/_agent --ignore-scripts
 bun run --bun check
 bun run --bun test --run
 bun run smoke:failures
